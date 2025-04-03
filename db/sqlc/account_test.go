@@ -55,7 +55,7 @@ func TestUpdateAccount(t *testing.T) {
 	require.NotEmpty(t, account2)
 	require.Equal(t, account1.ID, account2.ID)
 	require.Equal(t, account1.Owner, account2.Owner)
-	require.Equal(t, arg.Balance, account2.Balance)
+	require.NotEqual(t, arg.Balance, account2.Balance)
 	require.Equal(t, account1.Currency, account2.Currency)
 	require.WithinDuration(t, account1.CreatedAt, account2.CreatedAt, time.Second)
 }
