@@ -3,22 +3,30 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 )
 
-// Store provee todas las funciones a ejecutar consultas sql y transacciones
-type Store struct {
+// Store provee todas las funciones a ejecutar consultas y transacciones
+type Store interface {
+	Querier
+	TransferTx(ctx context.Context, arg TransferTxParams) (TransferTxResult, error)
+	DeleteAccountCheckRows(ctx context.Context, id int64) error
+}
+
+// SQLStore provee todas las funciones a ejecutar consultas sql y transacciones
+type SQLStore struct {
 	*Queries
 	db *sql.DB
 }
 
 // NewStore crea una nueva Store
-func NewStore(db *sql.DB) *Store {
-	return &Store{New(db), db}
+func NewStore(db *sql.DB) *SQLStore {
+	return &SQLStore{New(db), db}
 }
 
 // execTx ejecuta una funcion con una base de datos transaccional
-func (store *Store) execTx(ctx context.Context, fn func(*Queries) error) error {
+func (store *SQLStore) execTx(ctx context.Context, fn func(*Queries) error) error {
 	tx, err := store.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -52,7 +60,7 @@ type TransferTxResult struct {
 var as int
 
 // TransferTx performs a money transfer from one account to the other.
-func (store *Store) TransferTx(ctx context.Context, arg TransferTxParams) (TransferTxResult, error) {
+func (store *SQLStore) TransferTx(ctx context.Context, arg TransferTxParams) (TransferTxResult, error) {
 	var result TransferTxResult
 
 	err := store.execTx(ctx, func(q *Queries) error {
@@ -123,4 +131,26 @@ func addMoney(
 	})
 
 	return
+}
+
+const deleteAccountSQL = `DELETE FROM accounts WHERE id = $1`
+
+var ErrNotFound = errors.New("record not found")
+
+func (store *SQLStore) DeleteAccountCheckRows(ctx context.Context, id int64) error {
+	result, err := store.db.ExecContext(ctx, deleteAccountSQL, id)
+	if err != nil {
+		return fmt.Errorf("error executing delete account query: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("error checking rows affected after delete: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return ErrNotFound
+	}
+
+	return nil
 }

@@ -1,29 +1,63 @@
 package api
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
+	"github.com/go-playground/validator/v10"
 	db "github.com/jammpu/simplebank/db/sqlc"
+	"github.com/jammpu/simplebank/token"
+	"github.com/jammpu/simplebank/util"
+	"log"
 )
 
 // Server servirá todas las peticiones http
 type Server struct {
-	store  *db.Store
-	router *gin.Engine
+	config     util.Config
+	store      db.Store
+	router     *gin.Engine
+	tokenMaker token.Maker
 }
 
 // NewServer crea una nueva HTTP server y configura las rutas
-func NewServer(store *db.Store) *Server {
-	server := &Server{store: store}
+func NewServer(config util.Config, store db.Store) (*Server, error) {
+	tokenMaker, err := token.NewPasetoMaker(config.TokenSymetricKey)
+	if err != nil {
+		return nil, fmt.Errorf("cannot create token maker: %w", err)
+	}
+	server := &Server{
+		config:     config,
+		store:      store,
+		tokenMaker: tokenMaker,
+	}
+
+	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
+		err := v.RegisterValidation("currency", validCurrency)
+		if err != nil {
+			log.Fatalf("validation error: %v", err)
+		}
+	}
+
+	server.setupRouter()
+	return server, nil
+}
+
+func (s *Server) setupRouter() {
 	router := gin.Default()
+	router.POST("/users", s.createUser)
+	router.POST("/users/login", s.loginUser)
 
-	router.POST("/accounts", server.createAccount)
-	router.GET("/accounts/:id", server.getAccount)
-	router.GET("/accounts", server.listAccount)
-	router.PUT("/accounts/:id", server.updateAccount)
-	router.DELETE("/accounts/:id", server.deleteAccount)
+	authRoutes := router.Group("/").Use(authMiddleware(s.tokenMaker))
 
-	server.router = router
-	return server
+	authRoutes.POST("/accounts", s.createAccount)
+	authRoutes.GET("/accounts/:id", s.getAccount)
+	authRoutes.GET("/accounts", s.listAccount)
+	//authRoutes.PUT("/accounts/:id", s.updateAccount)
+	//authRoutes.DELETE("/accounts/:id", s.deleteAccount)
+
+	authRoutes.POST("/transfer", s.createTransfer)
+
+	s.router = router
 }
 
 // Start corre el HTTP server con una direccion especifica
