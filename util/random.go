@@ -1,6 +1,7 @@
 package util
 
 import (
+	"fmt"
 	"math/rand"
 	"strings"
 )
@@ -35,6 +36,11 @@ func RandomMoney() int64 {
 
 // RandomCurrency genera tipo de modena aleatorio
 func RandomCurrency() string {
-	currencies := []string{"EUR", "US", "CAD"}
+	currencies := []string{EUR, USD}
 	return currencies[rand.Intn(len(currencies))]
+}
+
+func RandomEmail() string {
+	return fmt.Sprintf("%s@gmail.com", RandomString(6))
+
 }
